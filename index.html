@@ -8,16 +8,16 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500;600;700;800&display=swap">
     <style>
         :root {
-                --paper: #0f1218;
-                --panel: #151a22;
-                --raise: #212733;
-                --stage: #0a0d12;
-                --track: #3a4252;
-                --border: #262d39;
-                --muted: #8d96a6;
-                --ink: #eaedf2;
-                --accent: #4d8bff;
-                --accent-d: rgba(77, 139, 255, .17);
+            --paper: #0f1218;
+            --panel: #151a22;
+            --raise: #212733;
+            --stage: #0a0d12;
+            --track: #3a4252;
+            --border: #262d39;
+            --muted: #8d96a6;
+            --ink: #eaedf2;
+            --accent: #4d8bff;
+            --accent-d: rgba(77, 139, 255, .17);
             color-scheme: light;
             box-sizing: border-box;
             padding-top: env(safe-area-inset-top, 0px);
@@ -1583,6 +1583,295 @@
         autoBtn.disabled = true; setTab('g'); $('tip').textContent = 'Drop a photo to see its histogram and a quick read of its light and color.';
         const dz = $('drop'); dz.onclick = () => $('file').click(); dz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click() } });
         let dcn = 0; addEventListener('dragenter', e => { e.preventDefault(); dcn++; dz.classList.add('over') }); addEventListener('dragleave', () => { if (--dcn <= 0) { dcn = 0; dz.classList.remove('over') } }); addEventListener('drop', () => { dcn = 0; dz.classList.remove('over') });
+
+        /* Asha batch layer. Add it AFTER your main <script>, inside its own <script> tag (or save as a file and load it after the main script). */
+        (() => {
+            const MAX = 40, PREV = 1024, COL = ['#4d8bff', '#34d399', '#f59e0b', '#f472b6', '#a78bfa', '#22d3ee', '#fb7185', '#a3e635', '#facc15', '#38bdf8'];
+            const PICK = '<svg width="26" height="26" viewBox="0 0 32 32"><path d="M5 5L26 12L12 26Z" fill="#fff" stroke="#fff" stroke-width="6" stroke-linejoin="round"/><path d="M5 5L26 12L12 26Z" fill="currentColor" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/></svg>';
+
+            /* ---------- styles + markup ---------- */
+            const sty = document.createElement('style');
+            sty.textContent = `
+.batch{display:flex;align-items:center;gap:10px}
+.batch[hidden]{display:none}
+.bs{position:relative;flex:1;min-width:0;display:flex;gap:8px;overflow-x:auto;padding:4px 2px;scrollbar-width:none}
+.bs::-webkit-scrollbar{display:none}
+.bt{position:relative;flex:none;width:62px;height:62px;display:grid;place-items:center;padding:0;overflow:hidden;border:2px solid var(--border);border-radius:11px;background:var(--paper);color:var(--muted);opacity:.55;transition:opacity .2s,border-color .2s}
+.bt canvas{object-fit:cover}
+.bt.on,.bt.work,.bt.done,.bt.add{opacity:1}
+.bt.on,.bt.work{border-color:var(--accent)}
+.bt.work,.bt.ld{animation:bw .9s ease-in-out infinite alternate}
+@keyframes bw{to{box-shadow:0 0 0 3px var(--accent-d)}}
+.bt.add{border-style:dashed;font:600 26px/1 "Nunito",system-ui,sans-serif}
+.bt .pg{position:absolute;left:0;bottom:0;height:3px;width:0;background:var(--accent)}
+.bt.done::after{content:"✓";position:absolute;right:3px;top:3px;width:17px;height:17px;border-radius:50%;background:var(--accent);color:#fff;font:800 11px/17px "Nunito",system-ui,sans-serif;text-align:center}
+.bc{flex:none;font-size:12px;font-weight:700;color:var(--muted);font-variant-numeric:tabular-nums}
+.ag{position:fixed;left:0;top:0;z-index:91;pointer-events:none;opacity:1;transition:opacity .25s;will-change:transform;color:var(--c)}
+.ag svg{display:block;margin:-4px 0 0 -4px;filter:drop-shadow(0 3px 5px rgba(0,0,0,.4))}
+.nv{position:absolute;top:50%;z-index:6;width:42px;height:42px;margin-top:-21px;border:0;border-radius:50%;background:rgba(12,14,18,.72);color:#fff;display:none;place-items:center}
+.nv svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.nv.l{left:8px}.nv.r{right:8px}.nv.show{display:grid}
+.bl .nv,.bl .bs{pointer-events:none}
+.bl .nv{opacity:.4}
+.bx{position:absolute;left:3px;top:3px;z-index:2;width:18px;height:18px;border-radius:50%;background:rgba(12,14,18,.82);color:#fff;font:700 13px/18px "Nunito",system-ui,sans-serif;text-align:center;opacity:0;transition:opacity .15s}
+.bt:hover .bx,.bt:focus-within .bx{opacity:1}
+@media(hover:none){.bx{opacity:1}}
+.bl .bx{display:none}
+.dlm{position:fixed;inset:0;z-index:96;background:rgba(5,8,16,.8);display:flex;align-items:center;justify-content:center;padding:16px}
+.dlm[hidden]{display:none}
+.dlb{width:min(520px,100%);max-height:100%;overflow:auto;display:flex;flex-direction:column;gap:14px;padding:16px;background:var(--panel);border:1px solid var(--border);border-radius:16px}
+.dh,.ds{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.dh b{font-size:17px;font-weight:800}
+.dnum{font-size:13px;font-weight:700;color:var(--muted)}
+.dg{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;max-height:260px;overflow:auto;padding:2px}
+.dt{position:relative;aspect-ratio:1;padding:0;overflow:hidden;border:2px solid var(--border);border-radius:11px;background:var(--paper)}
+.dt canvas{object-fit:cover}
+.dt.on{border-color:var(--accent)}
+.dt::after{content:"";position:absolute;left:5px;top:5px;width:18px;height:18px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.35)}
+.dt.on::after{content:"✓";background:var(--accent);border-color:var(--accent);color:#fff;font:800 11px/14px "Nunito",system-ui,sans-serif;text-align:center}
+.dt small{position:absolute;left:5px;bottom:5px;padding:1px 7px;border-radius:99px;background:rgba(12,14,18,.8);color:#fff;font-size:10.5px;font-weight:700}
+.dgo{width:100%;height:48px;font-size:15px}`;
+            document.head.appendChild(sty);
+
+            const bar = document.createElement('div'); bar.className = 'batch'; bar.hidden = true;
+            bar.innerHTML = '<div class="bs"></div><span class="bc"></span>';
+            document.querySelector('.center').insertBefore(bar, document.querySelector('.below'));
+            const bs = bar.firstChild, bc = bar.lastChild;
+            const add = document.createElement('label'); add.className = 'bt add'; add.htmlFor = 'file'; add.textContent = '+'; add.setAttribute('aria-label', 'Add photos'); bs.appendChild(add);
+            const arrow = (c, d, l) => { const b = document.createElement('button'); b.className = 'nv ' + c; b.setAttribute('aria-label', l); b.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + d + '"/></svg>'; return b };
+            const nl = arrow('l', 'M15 5l-7 7 7 7', 'Previous photo'), nr = arrow('r', 'M9 5l7 7-7 7', 'Next photo');
+            $('stage').append(nl, nr);
+
+            /* ---------- state ---------- */
+            let items = [], cur = -1, running = false, adding = false, loading = false, ags = [], queue = [], finish = null, grab = null, exporting = false, dlSel = new Set(), dq = 1920;
+            const snap = () => ({ gr: graded, P: { ...P }, WH: WH.map(q => ({ ...q })), H8: H8.map(q => [...q]), C: CVS.map(p => p.map(q => [...q])) });
+            const apply = s => {
+                Object.assign(P, s.P); WH.forEach((q, i) => Object.assign(q, s.WH[i])); H8.forEach((q, i) => { q[0] = s.H8[i][0]; q[1] = s.H8[i][1]; q[2] = s.H8[i][2] });
+                for (let i = 0; i < 4; i++) CVS[i] = s.C[i].map(p => [...p]); rebuild()
+            }, restore = s => { apply(s); sync(); render() };
+            const stFrom = g => {
+                const p = {}; Object.keys(P).forEach(k => p[k] = KEYS.includes(k) ? g.T[k] : 0);
+                const C = [0, 1, 2, 3].map(() => ID()); C[0][1][1] -= g.cu; C[0][3][1] += g.cu;
+                return { gr: true, P: p, WH: g.wv.map(a => ({ h: a[0], s: a[1], l: a[2] })), H8: Array.from({ length: 8 }, () => [0, 0, 0]), C }
+            };
+            const gUI = () => { graded = true; $('gwrap').classList.add('open'); $('exp').classList.add('open'); showCompare(true); setPos(50); autoBtn.textContent = 'Run auto again' };
+
+            function upd() {
+                const n = items.length, d = items.filter(x => x.status === 'done').length;
+                bar.hidden = n < 1; $('exp').classList.toggle('open', !running && (d > 0 || graded)); bc.textContent = d + ' of ' + n + ' graded';
+                [nl, nr].forEach(b => b.classList.toggle('show', n > 1));
+                items.forEach((x, i) => x.el.classList.toggle('on', i === cur))
+            }
+            function ensure(it) { const l = it.el.offsetLeft, w = it.el.offsetWidth; if (l < bs.scrollLeft || l + w > bs.scrollLeft + bs.clientWidth) bs.scrollTo({ left: l - bs.clientWidth / 2 + w / 2, behavior: reduce ? 'auto' : 'smooth' }) }
+
+            function mk(f) {
+                const el = document.createElement('button'); el.className = 'bt ld'; el.title = f.name; el.setAttribute('aria-label', f.name);
+                const cv2 = document.createElement('canvas'), pg = document.createElement('i'); pg.className = 'pg'; const bx = document.createElement('span'); bx.className = 'bx'; bx.textContent = '×'; bx.setAttribute('role', 'button'); bx.setAttribute('aria-label', 'Remove ' + f.name); el.append(cv2, pg, bx);
+                const it = { file: f, name: f.name, el, cv: cv2, cx: cv2.getContext('2d'), pg, status: 'queued' };
+                el.onclick = () => select(items.indexOf(it)); bx.onclick = e => { e.stopPropagation(); remove(items.indexOf(it)) }; bs.insertBefore(el, add); items.push(it); return it
+            }
+
+            /* ---------- per-photo auto grade (same maths as the main editor, run on the small copy) ---------- */
+            function gradeOf(it) {
+                const keep = src; src = it.sm; let a;
+                try {
+                    a = analyze(it.sm.data); const z = {}; KEYS.forEach(k => z[k] = 0); const lim = Math.max(.02, measure(z).clip * 1.15 + .005);
+                    for (let i = 0; i < 18; i++) { const m = measure(a); if (m.clip > lim) { a.exposure -= 4; a.highlights = Math.max(-60, a.highlights - 4) } else if (m.mean < .3 && a.exposure < 30) a.exposure += 3; else break }
+                } finally { src = keep }
+                const d = it.sm.data; let sr = 0, sb = 0, n = 0; for (let i = 0; i < d.length; i += 8) { sr += d[i]; sb += d[i + 2]; n++ } const tp = (sr - sb) / n / 255;
+                return { T: a, cu: .035, wv: tp > .1 ? [[195, .18, 0], [0, 0, 0], [35, .12, 0]] : tp < -.05 ? [[220, .1, 0], [0, 0, 0], [35, .15, 0]] : [[0, 0, 0], [0, 0, 0], [40, .08, 0]] }
+            }
+            /* draws the thumbnail with the grade applied at strength t (0 = original, 1 = full) */
+            function paint(it, t) {
+                const g = it.g, T = g.T, s = it.sm.data, o = it.out.data, n = s.length;
+                const k = Math.pow(2, T.exposure * t / 50), w = T.warmth * t / 100, ti = T.tint * t / 100, rM = k * (1 + .25 * w), gM = k * (1 - .2 * ti), bM = k * (1 - .25 * w);
+                const sh = T.shadows * t / 100 * .3, hl = T.highlights * t / 100 * .45, ct = 1 + T.contrast * t / 100 * .8, sat = 1 + T.saturation * t / 100, vib = T.vibrance * t / 100;
+                const sa = Math.min(1, KEYS.reduce((a, q) => a + Math.abs(T[q]), 0) * t / 40), V = [];
+                g.wv.forEach(q => { const c1 = hsv(q[0]), m = (c1[0] + c1[1] + c1[2]) / 3, kk = q[1] * t * .35; V.push((c1[0] - m) * kk, (c1[1] - m) * kk, (c1[2] - m) * kk) });
+                const LM = lutOf([[0, 0], [.25, .25 - g.cu * t], [.5, .5], [.75, .75 + g.cu * t], [1, 1]]);
+                for (let i = 0; i < n; i += 4) {
+                    let r = s[i] / 255 * rM, gg = s[i + 1] / 255 * gM, b = s[i + 2] / 255 * bM, L = .2126 * r + .7152 * gg + .0722 * b; L = L < 0 ? 0 : L > 1 ? 1 : L;
+                    const a = sh * (1 - L) * (1 - L) + hl * L * L; r += a; gg += a; b += a; r = .5 + (r - .5) * ct; gg = .5 + (gg - .5) * ct; b = .5 + (b - .5) * ct;
+                    const L2 = .2126 * r + .7152 * gg + .0722 * b, mx = Math.max(r, gg, b), mn = Math.min(r, gg, b), am = Math.max(0, sat + vib * (1 - (mx > 0 ? (mx - mn) / mx : 0)));
+                    r = sf(L2 + (r - L2) * am, sa); gg = sf(L2 + (gg - L2) * am, sa); b = sf(L2 + (b - L2) * am, sa);
+                    const Y = clamp(.2126 * r + .7152 * gg + .0722 * b, 0, 1), a1 = (1 - Y) * (1 - Y), a3 = Y * Y, a2 = 1 - a1 - a3;
+                    r += a1 * V[0] + a2 * V[3] + a3 * V[6]; gg += a1 * V[1] + a2 * V[4] + a3 * V[7]; b += a1 * V[2] + a2 * V[5] + a3 * V[8];
+                    o[i] = LM[(clamp(r, 0, 1) * 255 + .5) | 0] * 255; o[i + 1] = LM[(clamp(gg, 0, 1) * 255 + .5) | 0] * 255; o[i + 2] = LM[(clamp(b, 0, 1) * 255 + .5) | 0] * 255; o[i + 3] = 255
+                }
+                it.cx.putImageData(it.out, 0, 0)
+            }
+
+            /* big-picture edits are mirrored onto the active photo's thumbnail */
+            const _dh = drawHist;
+            window.drawHist = function (d) { if (grab) { grab(d); return } _dh(d); const it = items[cur]; if (it && it.sm) it.cx.drawImage(cG, 0, 0, it.cv.width, it.cv.height) };
+
+            /* ---------- agents ---------- */
+            function assign(a, it, x, y, t0, fd) { it.g = it.g || gradeOf(it); it.status = 'work'; it.el.classList.add('work'); a.it = it; a.mode = 'fly'; a.fx = x; a.fy = y; a.t0 = t0; a.fd = fd; a.lp = 0; ensure(it) }
+            function next(a, x, y, now) {
+                const it = a.it; it.status = 'done'; it.pg.style.width = '0'; it.el.classList.remove('work'); it.el.classList.add('done'); SND.tick(); upd();
+                const n = queue.shift(); if (n) assign(a, n, x, y, now, 320); else { a.it = null; a.el.style.opacity = 0 }
+            }
+            function tick(now) {
+                const sr = bs.getBoundingClientRect();
+                for (const a of ags) {
+                    const it = a.it; if (!it) continue;
+                    const r = it.el.getBoundingClientRect(), tx = r.left + r.width / 2, ty = r.top + r.height / 2; let x = a.x, y = a.y;
+                    if (now < a.t0) { x = a.fx; y = a.fy }
+                    else if (a.mode === 'fly') { const p = Math.min(1, (now - a.t0) / a.fd), e = ease(p); x = a.fx + (tx - a.fx) * e; y = a.fy + (ty - a.fy) * e; if (p >= 1) { a.mode = 'work'; a.t0 = now } }
+                    else {
+                        const p = Math.min(1, (now - a.t0) / a.D); x = tx + Math.sin(now / 170 + a.ph) * r.width * .3; y = ty + Math.cos(now / 210 + a.ph) * r.height * .28;
+                        it.pg.style.width = p * 100 + '%'; if (now - a.lp > 110 || p >= 1) { a.lp = now; paint(it, ease(p)) } if (p >= 1) next(a, x, y, now)
+                    }
+                    a.x = x; a.y = y; a.el.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+                    if (a.it) a.el.style.opacity = now < a.t0 || (r.right > sr.left && r.left < sr.right) ? 1 : 0
+                }
+                if (ags.some(a => a.it) || queue.length) requestAnimationFrame(tick); else finish()
+            }
+
+            async function startBatch() {
+                if (running || busy || loading || adding || !src) return;
+                const lead = items[cur], q = items.filter(x => x !== lead && x.status !== 'done'), n = q.length + 1;
+                const tr = n <= 5 ? [n, 14000] : n <= 15 ? [8, 8000] : [10, 4000];
+                let ex = Math.min(tr[0] - 1, q.length); if (innerWidth < 700) ex = Math.min(ex, 4); const D = reduce ? 500 : tr[1];
+                running = true; document.body.classList.add('bl'); queue = q; ags = [];
+                lead.status = 'work'; lead.el.classList.remove('done'); lead.el.classList.add('work'); q.forEach(x => x.el.classList.remove('done')); upd();
+                const lp = autoShow().then(() => { lead.status = 'done'; lead.el.classList.remove('work'); lead.el.classList.add('done'); upd() });
+                const sx = innerWidth - 80, sy = innerHeight - 90, now = performance.now();
+                for (let i = 0; i < ex; i++) {
+                    const el = document.createElement('div'); el.className = 'ag'; el.style.setProperty('--c', COL[i % COL.length]); el.innerHTML = PICK; el.style.transform = 'translate(' + sx + 'px,' + sy + 'px)'; document.body.appendChild(el);
+                    const a = { el, D, ph: i * 1.9, x: sx, y: sy, it: null }; ags.push(a); assign(a, queue.shift(), sx, sy, now + 120 + i * 110, 650)
+                }
+                const ad = new Promise(res => { finish = res }); if (ex) requestAnimationFrame(tick); else finish();
+                try { await Promise.all([lp, ad]) } finally { running = false; document.body.classList.remove('bl'); ags.forEach(a => a.el.remove()); ags = []; upd() }
+                if (items.length > 1) asha('All ' + items.length + ' photos are graded. Tap one below, or use the arrows, to check each one.', 350)
+            }
+
+            /* ---------- adding + switching photos ---------- */
+            async function addFiles(list) {
+                if (running || busy) { cap('Wait for Asha to finish first.', 2000); return }
+                if (adding || loading) return;
+                const fs = [...list]; adding = true; autoBtn.disabled = true; let ok = 0;
+                for (const f of fs) {
+                    if (items.length >= MAX) { cap('Up to ' + MAX + ' photos per batch.', 2500); break }
+                    const it = mk(f); upd(); cap('Reading ' + f.name + '...');
+                    try {
+                        const r = await decodeFile(f), im = r.img, iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height, k = Math.min(1, 200 / Math.max(iw, ih)), w = Math.max(1, Math.round(iw * k)), h = Math.max(1, Math.round(ih * k)), c = document.createElement('canvas');
+                        c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true }); x.imageSmoothingQuality = 'high'; x.drawImage(im, 0, 0, w, h);
+                        it.sm = x.getImageData(0, 0, w, h); it.out = new ImageData(w, h); it.cv.width = w; it.cv.height = h; it.cx.putImageData(it.sm, 0, 0); it.el.classList.remove('ld'); ok++;
+                        if (cur < 0) { cur = items.indexOf(it); loadImage(prev(im)) }
+                        if (im.close) im.close(); if (r.note) asha(r.note, 300)
+                    } catch (e) { it.el.remove(); items.splice(items.indexOf(it), 1); cap('Could not open ' + f.name + '.', 2500) }
+                    upd()
+                }
+                adding = false; autoBtn.disabled = !items.length; upd(); if (ok) cap(ok + (ok > 1 ? ' photos' : ' photo') + ' ready.', 1800)
+            }
+            async function select(i) {
+                if (running || busy || adding || loading || i < 0 || i === cur || !items[i]) return;
+                const old = items[cur], it = items[i]; if (old && src) old.st = snap();
+                loading = true; cur = i; upd(); cap('Opening ' + it.name + '...');
+                try {
+                    const r = await decodeFile(it.file); loadImage(prev(r.img)); if (r.img.close) r.img.close();
+                    const s = it.st || (it.g && it.status === 'done' ? stFrom(it.g) : null); if (s) { restore(s); if (s.gr) gUI() }
+                    cap(it.name, 1200)
+                } catch (e) { cap('Could not open that photo.', 2500) }
+                loading = false; upd()
+            }
+            nl.onclick = () => select((cur - 1 + items.length) % items.length); nr.onclick = () => select((cur + 1) % items.length);
+
+            /* ---------- remove photos ---------- */
+            function prev(im) { const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height, k = Math.min(1, PREV / Math.max(iw, ih)); if (k >= 1) return im; const c = document.createElement('canvas'); c.width = Math.round(iw * k); c.height = Math.round(ih * k); const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(im, 0, 0, c.width, c.height); return c }
+            function clearMain() {
+                src = null; W = H = 0; graded = false; viewer.hidden = true; $('drop').hidden = false; showCompare(false); Object.keys(P).forEach(k => P[k] = 0); resetExtras(); sync(); $('gwrap').classList.remove('open'); $('met').innerHTML = '';
+                $('tip').textContent = 'Drop a photo to see its histogram and a quick read of its light and color.'; const h = $('hist'); h.getContext('2d').clearRect(0, 0, h.width, h.height); autoBtn.disabled = true; autoBtn.textContent = 'Auto color grade'
+            }
+            async function remove(i) {
+                if (running || adding || loading || busy || !items[i]) return;
+                const was = i === cur; items[i].el.remove(); items.splice(i, 1);
+                if (!items.length) { cur = -1; clearMain(); upd(); return }
+                if (was) { cur = -1; await select(Math.min(i, items.length - 1)) } else { if (i < cur) cur--; upd() }
+            }
+
+            /* ---------- one Download button: choose photos + quality, full-quality re-render, zip for many ---------- */
+            const crcT = (() => { const t = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xEDB88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0 } return t })();
+            const crc = b => { let c = ~0; for (let i = 0; i < b.length; i++) c = crcT[(c ^ b[i]) & 255] ^ (c >>> 8); return ~c >>> 0 };
+            function zip(files) {
+                const enc = new TextEncoder(), parts = [], cen = []; let off = 0;
+                for (const f of files) {
+                    const nm = enc.encode(f.name), c = crc(f.data), n = f.data.length, lh = new DataView(new ArrayBuffer(30));
+                    lh.setUint32(0, 0x04034b50, true); lh.setUint16(4, 20, true); lh.setUint16(6, 0x0800, true); lh.setUint16(12, 0x21, true); lh.setUint32(14, c, true); lh.setUint32(18, n, true); lh.setUint32(22, n, true); lh.setUint16(26, nm.length, true);
+                    parts.push(new Uint8Array(lh.buffer), nm, f.data);
+                    const ch = new DataView(new ArrayBuffer(46));
+                    ch.setUint32(0, 0x02014b50, true); ch.setUint16(4, 20, true); ch.setUint16(6, 20, true); ch.setUint16(8, 0x0800, true); ch.setUint16(14, 0x21, true); ch.setUint32(16, c, true); ch.setUint32(20, n, true); ch.setUint32(24, n, true); ch.setUint16(28, nm.length, true); ch.setUint32(42, off, true);
+                    cen.push(new Uint8Array(ch.buffer), nm); off += 30 + nm.length + n
+                }
+                const cs = cen.reduce((a, p) => a + p.length, 0), e = new DataView(new ArrayBuffer(22));
+                e.setUint32(0, 0x06054b50, true); e.setUint16(8, files.length, true); e.setUint16(10, files.length, true); e.setUint32(12, cs, true); e.setUint32(16, off, true);
+                return new Blob([...parts, ...cen, new Uint8Array(e.buffer)], { type: 'application/zip' })
+            }
+            /* re-renders a photo from the ORIGINAL file at the chosen size, using the editor's own render() with that photo's edits */
+            async function renderTo(it, long, st) {
+                const r = await decodeFile(it.file), im = r.img, iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height, k = Math.min(1, long / Math.max(iw, ih)), w = Math.round(iw * k), h = Math.round(ih * k);
+                const c = document.createElement('canvas'); c.width = w; c.height = h; const x = c.getContext('2d', { willReadFrequently: true }); x.imageSmoothingQuality = 'high'; x.drawImage(im, 0, 0, w, h); if (im.close) im.close();
+                if (st) {
+                    src = x.getImageData(0, 0, w, h); W = w; H = h; noise = new Float32Array(w * h); for (let i = 0; i < noise.length; i++) noise[i] = Math.random() - .5;
+                    apply(st); let d = null; grab = o => { d = o }; try { render() } finally { grab = null } x.putImageData(new ImageData(d, w, h), 0, 0)
+                }
+                return new Promise(res => c.toBlob(res, 'image/jpeg', .92))
+            }
+            async function deliver(blob, name) {
+                try { const dl = window.claude && claude.use ? await claude.use('downloads') : null; if (dl) { await dl.save({ filename: name, data: blob }); return 'saved' } }
+                catch (e) { if (e && e.code === 'declined') return 'declined' }
+                const url = URL.createObjectURL(blob);
+                if (blob.type === 'image/jpeg') { $('svi').src = url; $('sva').href = url; $('sva').download = name; $('sv').hidden = false; return 'saved' }
+                const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); return 'saved'
+            }
+            const modal = document.createElement('div'); modal.className = 'dlm'; modal.hidden = true;
+            modal.innerHTML = '<div class="dlb" role="dialog" aria-label="Download"><div class="dh"><b>Download</b><button class="ib dx" aria-label="Close"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div><div class="ds"><span class="dnum"></span><button class="chip dall"></button></div><div class="dg"></div><div class="ct">Quality</div><div class="chips dq"></div><button class="btn dgo"></button><p class="hint dp" hidden></p></div>';
+            document.body.appendChild(modal);
+            const mq = s => modal.querySelector(s), grid = mq('.dg'), goBtn = mq('.dgo'), dp = mq('.dp'), allBtn = mq('.dall'), num = mq('.dnum'), qc = mq('.dq');
+            [['1080p', 1920], ['720p', 1280]].forEach(([l, v]) => { const b = document.createElement('button'); b.className = 'chip' + (v === dq ? ' on' : ''); b.textContent = l; b.onclick = () => { dq = v;[...qc.children].forEach(c => c.classList.toggle('on', c === b)) }; qc.appendChild(b) });
+            function refresh() {
+                const n = dlSel.size; num.textContent = n + ' of ' + items.length + ' selected'; allBtn.textContent = n === items.length ? 'Clear' : 'Select all';
+                goBtn.textContent = n ? 'Download ' + n + (n > 1 ? ' photos' : ' photo') : 'Select photos'; goBtn.disabled = !n || exporting;[...grid.children].forEach((t, i) => t.classList.toggle('on', dlSel.has(items[i])))
+            }
+            function openDl() {
+                if (running || busy || adding || loading || !items.length) return;
+                dlSel = new Set(items); grid.innerHTML = '';
+                items.forEach(it => {
+                    const t = document.createElement('button'), c = document.createElement('canvas'); t.className = 'dt'; t.setAttribute('aria-label', it.name); c.width = it.cv.width; c.height = it.cv.height; c.getContext('2d').drawImage(it.cv, 0, 0); t.appendChild(c);
+                    if (!(it.status === 'done' || (items[cur] === it && graded))) { const s = document.createElement('small'); s.textContent = 'Original'; t.appendChild(s) }
+                    t.onclick = () => { dlSel.has(it) ? dlSel.delete(it) : dlSel.add(it); refresh() }; grid.appendChild(t)
+                });
+                dp.hidden = true; refresh(); modal.hidden = false
+            }
+            async function runExport() {
+                const sel = items.filter(x => dlSel.has(x)); if (!sel.length || exporting) return;
+                const long = dq, tag = long > 1500 ? '1080p' : '720p', keep = { src, W, H, noise, s: snap() }, outs = [];
+                exporting = adding = busy = true; viewer.style.visibility = 'hidden'; goBtn.disabled = true; dp.hidden = false;
+                try {
+                    for (let n = 0; n < sel.length; n++) {
+                        const it = sel[n]; dp.textContent = 'Preparing ' + (n + 1) + ' of ' + sel.length + '...'; await new Promise(r => setTimeout(r, 30));
+                        const st = it === items[cur] ? keep.s : it.st || (it.g && it.status === 'done' ? stFrom(it.g) : null), b = await renderTo(it, long, st), base = it.name.replace(/\.[^.]+$/, '').replace(/[^\w-]+/g, '_');
+                        outs.push({ name: (sel.length > 1 ? String(n + 1).padStart(2, '0') + '-' : '') + 'asha-' + base + '-' + tag + '.jpg', blob: b })
+                    }
+                    let blob = outs[0].blob, name = outs[0].name;
+                    if (outs.length > 1) { const fl = []; for (const o of outs) fl.push({ name: o.name, data: new Uint8Array(await o.blob.arrayBuffer()) }); blob = zip(fl); name = 'asha-photos-' + tag + '.zip' }
+                    dp.textContent = 'Almost there...'; const res = await deliver(blob, name);
+                    if (res !== 'declined') { modal.hidden = true; cap(outs.length > 1 ? 'Saved ' + outs.length + ' photos as a zip.' : 'Saved your photo.', 2400) }
+                } catch (e) { dp.textContent = 'That did not work. Try fewer photos or 720p.' }
+                finally { src = keep.src; W = keep.W; H = keep.H; noise = keep.noise; apply(keep.s); sync(); render(); viewer.style.visibility = ''; exporting = adding = busy = false; goBtn.disabled = false; upd(); refresh() }
+            }
+            mq('.dx').onclick = () => { if (!exporting) modal.hidden = true }; modal.onclick = e => { if (e.target === modal && !exporting) modal.hidden = true };
+            allBtn.onclick = () => { dlSel = dlSel.size === items.length ? new Set() : new Set(items); refresh() }; goBtn.onclick = runExport;
+            $('d720').remove(); $('d1080').textContent = 'Download'; $('d1080').onclick = openDl;
+
+            /* ---------- wiring: multi-select input, multi-drop, new Auto button ---------- */
+            window.openFile = () => { };
+            const fi = $('file').cloneNode(true); fi.multiple = true; $('file').replaceWith(fi);
+            fi.addEventListener('change', () => { if (fi.files.length) addFiles(fi.files); fi.value = '' });
+            addEventListener('drop', e => { const fs = e.dataTransfer && e.dataTransfer.files; if (fs && fs.length) addFiles(fs) });
+            autoBtn.onclick = startBatch; upd();
+        })();
     </script>
 </body>
 
