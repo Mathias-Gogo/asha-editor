@@ -6,7 +6,7 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
             gs: [['exposure', 'Exposure'], ['contrast', 'Contrast'], ['highlights', 'Highlights'], ['shadows', 'Shadows'], ['vibrance', 'Vibrance'], ['saturation', 'Saturation'], ['warmth', 'Warmth'], ['tint', 'Tint']],
             ts: [['structure', 'Structure'], ['clarity', 'Clarity'], ['sharpen', 'Sharpen', 0], ['grain', 'Grain', 0], ['vignette', 'Vignette'], ['fade', 'Fade', 0]]
         };
-        const HINT = { l: 'Pick a style and Asha sets the tools for you.', c: 'Tint shadows, midtones and highlights with the wheels, or shift single colors below.', v: 'Drag points to shape brightness. Tap the line to add a point, double-tap a point to remove it.', g: 'Run Auto color grade, then fine tune the sliders here.', t: 'Structure and clarity add texture, sharpen adds crispness.' };
+        const HINT = { c: 'Tint shadows, midtones and highlights with the wheels, or shift single colors below.', v: 'Drag points to shape brightness. Tap the line to add a point, double-tap a point to remove it.', g: 'Adjust the sliders yourself, or run Auto color grade and fine tune from there.', t: 'Structure and clarity add texture, sharpen adds crispness.' };
         const reduce = matchMedia('(prefers-reduced-motion:reduce)').matches;
         const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
         const P = {};[...KEYS, 'structure', 'clarity', 'sharpen', 'grain', 'vignette', 'fade'].forEach(k => P[k] = 0);
@@ -16,15 +16,9 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
         let AC = null, muted = false, lt = 0;
         function beep(f1, f2, d, v, ty) { if (muted) return; try { AC = AC || new (window.AudioContext || window.webkitAudioContext)(); if (AC.state === 'suspended') AC.resume(); const t = AC.currentTime, o = AC.createOscillator(), g = AC.createGain(); o.type = ty || 'sine'; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t + d); g.gain.setValueAtTime(v, t); g.gain.exponentialRampToValueAtTime(.0001, t + d); o.connect(g); g.connect(AC.destination); o.start(t); o.stop(t + d + .02) } catch (e) { } }
         const SND = { click: () => { beep(2000, 650, .05, .06, 'square'); setTimeout(() => beep(900, 500, .04, .04), 45) }, tick: () => { const n = performance.now(); if (n - lt > 65) { lt = n; beep(2700, 2300, .02, .025) } }, pop: () => beep(520, 900, .1, .07), send: () => beep(700, 1150, .07, .06), done: () => { beep(660, 660, .16, .06); setTimeout(() => beep(990, 990, .26, .06), 120) } };
-        $('snd').onclick = () => { muted = !muted; $('snd').classList.toggle('off', muted); $('snd').setAttribute('aria-pressed', muted); if (!muted) SND.pop() };
         /* ---------- caption + chat ---------- */
         let capT; function cap(t, hold) { const c = $('cap'); c.textContent = t; c.classList.add('on'); clearTimeout(capT); if (hold) capT = setTimeout(() => c.classList.remove('on'), hold) }
-        const log = $('log'), chat = $('chat'), chatBtn = $('chatBtn'), nd = chatBtn.querySelector('.nd');
-        function addMsg(w, t) { const m = document.createElement('div'); m.className = 'msg ' + w; m.textContent = t; log.appendChild(m); log.scrollTop = 1e6; return m }
-        async function asha(t, d = 650) { const m = document.createElement('div'); m.className = 'msg a typing'; m.innerHTML = '<i></i><i></i><i></i>'; log.appendChild(m); log.scrollTop = 1e6; await sleep(reduce ? 10 : d); m.className = 'msg a'; m.textContent = t; SND.pop(); log.scrollTop = 1e6; if (chat.hidden) nd.hidden = false }
-        function openChat(on) { chat.hidden = !on; chatBtn.classList.toggle('on', on); chatBtn.setAttribute('aria-expanded', on); if (on) { nd.hidden = true; SND.pop(); setTimeout(() => $('ask').focus(), 60) } }
-        chatBtn.onclick = () => openChat(chat.hidden); $('chx').onclick = () => openChat(false);
-        addMsg('a', 'Hi, I\u2019m Asha. Drop a photo into the editor, then tell me the look you want. Describe it in a few words and I\u2019ll grade it for you.');
+        const addMsg = () => { }, asha = async () => { }, openChat = () => { };
         /* ---------- sliders ---------- */
         function fill(i) { const mn = +i.min, mx = +i.max, p = (+i.value - mn) / (mx - mn) * 100, z = mn < 0 ? -mn / (mx - mn) * 100 : 0; i.style.setProperty('--a', Math.min(p, z)); i.style.setProperty('--b', Math.max(p, z)) }
         Object.keys(DEFS).forEach(h => DEFS[h].forEach(([k, l, mn = -100, mx = 100]) => {
@@ -107,21 +101,15 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
             ctxG.putImageData(out, 0, 0); drawHist(d)
         }
         function scheduleRender() { if (!pending) { pending = true; requestAnimationFrame(render) } }
-        function drawHist(d) {
-            const hc = $('hist'), x = hc.getContext('2d'), w = hc.width, h = hc.height, B = [new Uint32Array(64), new Uint32Array(64), new Uint32Array(64)];
-            for (let i = 0; i < d.length; i += 16) { B[0][d[i] >> 2]++; B[1][d[i + 1] >> 2]++; B[2][d[i + 2] >> 2]++ }
-            let mx = 1; B.forEach(a => a.forEach(v => { if (v > mx) mx = v })); x.clearRect(0, 0, w, h); x.globalAlpha = .55;
-            ['#ff4d4d', '#33c27a', '#4d8bff'].forEach((c, j) => { x.fillStyle = c; for (let k = 0; k < 64; k++) { const bh = Math.sqrt(B[j][k] / mx) * h; x.fillRect(k * w / 64, h - bh, w / 64 + .5, bh) } }); x.globalAlpha = 1
-        }
+        function drawHist(d) { }
         function readPhoto() {
             const d = src.data, hist = new Uint32Array(256); let n = 0, sum = 0, sr = 0, sb = 0, cl = 0, cr = 0, ch = 0, sk = 0;
             for (let i = 0; i < d.length; i += 8) { const r = d[i], g = d[i + 1], b = d[i + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b), L = Math.round(.2126 * r + .7152 * g + .0722 * b); hist[L]++; sum += L; sr += r; sb += b; n++; if (mx >= 250) cl++; if (L < 8) cr++; ch += (mx - mn) / 255; if (r > 95 && g > 40 && b > 20 && mx - mn > 15 && Math.abs(r - g) > 15 && r > g && r > b) sk++ }
             let acc = 0, p1 = 0, p99 = 255, g1 = false; for (let v = 0; v < 256; v++) { acc += hist[v]; if (!g1 && acc >= n * .01) { p1 = v; g1 = true } if (acc >= n * .99) { p99 = v; break } }
             const mean = sum / n / 255, spread = (p99 - p1) / 255, temp = (sr - sb) / n / 255, sat = ch / n;
             const T = [['Brightness', (mean < .3 ? 'Dark' : mean < .42 ? 'Low-key' : mean < .6 ? 'Balanced' : 'Bright') + ' \u00b7 ' + Math.round(mean * 100) + '%'], ['Contrast', spread < .55 ? 'Flat' : spread < .85 ? 'Natural' : 'Punchy'], ['Light range', cl / n > .02 ? Math.round(cl / n * 100) + '% near clipping' : cr / n > .1 ? 'Deep shadows' : 'Healthy'], ['Color', (temp > .1 ? 'Warm' : temp < -.05 ? 'Cool' : 'Neutral') + ', ' + (sat < .15 ? 'muted' : sat < .35 ? 'natural' : 'vivid')]];
-            $('met').innerHTML = T.map(a => '<div class="m">' + a[0] + '<b>' + a[1] + '</b></div>').join('');
-            const tp = []; if (cl / n > .02) tp.push('Bright areas are close to clipping, so highlights need pulling down.'); if (mean < .35) tp.push('It is on the dark side, so shadows can be lifted.'); else if (mean > .6) tp.push('It is quite bright, so lower the exposure a little.'); if (spread < .6) tp.push('Contrast is flat, so a curve will add depth.'); if (sk / n > .04) tp.push('Skin tones found, so keep them natural when you tint.');
-            tp.push(temp > .1 ? 'Already warm, so teal shadows will feel cinematic.' : temp < -.05 ? 'Cool overall, so warm highlights would balance it.' : 'Colors are neutral, so any look will work.'); $('tip').textContent = tp.slice(0, 3).join(' '); TEMP = temp
+            
+            TEMP = temp
         }
         /* ---------- color wheels, single colors, curves ---------- */
         function wheelCanvas() {
@@ -166,21 +154,6 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
         ['RGB', 'R', 'G', 'B'].forEach((n, i) => { const b = document.createElement('button'); b.className = 'chip' + (i ? '' : ' on'); b.textContent = n; b.onclick = () => { ci = i;[...$('ch').children].forEach((c, j) => c.classList.toggle('on', j === i)); drawCV() }; $('ch').appendChild(b) });
         $('cr').onclick = () => { CVS[ci] = ID(); rebuild(); drawCV(); scheduleRender() };
         /* ---------- looks ---------- */
-        const LK = { teal: { contrast: 12, vibrance: 10, W: [[195, .6, 0], [0, 0, 0], [30, .5, 0]] }, film: { contrast: -8, saturation: -15, fade: 45, grain: 30, vignette: 20, W: [[205, .25, 0], [0, 0, 0], [40, .25, 0]] }, moody: { exposure: -12, contrast: 22, shadows: -10, saturation: -12, vignette: 35, W: [[215, .4, -5], [0, 0, 0], [0, 0, 0]] }, gold: { warmth: 28, exposure: 4, highlights: -15, vibrance: 15, contrast: -5, W: [[0, 0, 0], [30, .25, 0], [38, .5, 0]] }, cool: { warmth: -26, contrast: 12, saturation: -8, exposure: -6, W: [[225, .5, 0], [0, 0, 0], [0, 0, 0]] }, airy: { exposure: 14, contrast: -14, shadows: 25, saturation: -8, fade: 18, W: [[0, 0, 0], [0, 0, 0], [45, .15, 0]] }, punch: { contrast: 25, vibrance: 25, saturation: 8, clarity: 20, sharpen: 25 }, mono: { saturation: -100, vibrance: -100, contrast: 18, grain: 25 } };
-        const NAMES = { teal: 'Teal & Orange', film: 'Faded Film', moody: 'Moody', gold: 'Golden Hour', cool: 'Cool Night', airy: 'Bright & Airy', punch: 'Punchy', mono: 'Black & White' };
-        const KW = [[/teal|orange|cinema|movie/, 'teal'], [/fade|vintage|retro|film|dreamy|soft|muted/, 'film'], [/moody|dark|dramatic|night|gritty/, 'moody'], [/golden|sunset|sunny|warm/, 'gold'], [/cool|cold|blue|icy|winter/, 'cool'], [/bright|airy|light|clean|fresh/, 'airy'], [/punch|vivid|vibrant|colorful|contrast|bold|sharp/, 'punch'], [/black and white|b&w|bw|mono/, 'mono']];
-        Object.keys(NAMES).forEach(k => { const b = document.createElement('button'); b.className = 'chip'; b.textContent = NAMES[k]; b.onclick = () => { [...$('chips').children].forEach(c => c.classList.toggle('on', c === b)); applyLook([k], 1) }; $('chips').appendChild(b) });
-        async function askLook() {
-            const raw = $('ask').value.trim(); if (!raw) return; $('ask').value = ''; SND.send(); addMsg('u', raw);
-            if (!src) { await asha('Drop a photo into the editor first, then tell me the look.'); return }
-            if (busy) { await asha('One moment, I\u2019m still working on the last look.'); return }
-            const t = raw.toLowerCase(), m = []; KW.forEach(([re, n]) => { if (re.test(t) && !m.includes(n)) m.push(n) });
-            if (!m.length) { await asha('I couldn\u2019t pick a style out of that. Try words like moody, warm, bright, cinematic, faded, punchy or black and white.'); return }
-            const names = m.slice(0, 3); await asha('On it. Going for ' + names.map(n => NAMES[n]).join(' + ') + '. Watch the photo.'); await sleep(450); openChat(false);
-            applyLook(names, /subtle|slight/.test(t) ? .5 : /strong|heavy|very|intense/.test(t) ? 1.4 : 1)
-        }
-        $('go').onclick = askLook; $('ask').addEventListener('keydown', e => { if (e.key === 'Enter') askLook() });
-        document.querySelectorAll('#sug .chip').forEach(b => b.onclick = () => { $('ask').value = b.dataset.q; askLook() });
         /* ---------- Asha demo cursor ---------- */
         const ash = $('ash'), dots = $('dots'), dc = dots.getContext('2d');
         function drawDots(t) {
@@ -217,7 +190,7 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
             busy = true; showing = true; autoBtn.disabled = true; openChat(false); document.body.classList.add('showing'); graded = false; $('exp').classList.remove('open'); showCompare(false);
             Object.keys(P).forEach(k => P[k] = 0); resetExtras(); sync(); render(); $('gwrap').classList.add('open'); setTab('g'); setPos(100); window.scrollTo({ top: 0 });
             place(innerWidth - 80, innerHeight - 90); ash.classList.add('on'); cap('Reading the photo...');
-            const hr = await seeEl($('hist')); await Promise.all([moveTo(hr.left + hr.width * .7, hr.top + hr.height * .5, 1100), tween(1300, t => drawDots(t))]);
+            const hr = await seeEl($('viewer')); await Promise.all([moveTo(hr.left + hr.width * .7, hr.top + hr.height * .5, 1100), tween(1300, t => drawDots(t))]);
             dots.style.opacity = 0; setPos(0); cap('Adjusting the light...'); await tapTab('g');
             const keys = ['exposure', 'highlights', 'shadows', 'contrast', 'vibrance', 'saturation', 'warmth'].filter(k => Math.abs(T[k]) >= 2).slice(0, 5), done = new Set(keys);
             for (const k of keys) await dragSlider(k, T[k], 520);
@@ -239,22 +212,13 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
             const T = {}; Object.keys(P).forEach(k => T[k] = KEYS.includes(k) ? auto[k] : 0);
             await show(T, wv, .035, 'Done. I adjusted the light, the curve and the color balance. Drag the line over the photo to compare, then fine tune any tool on the right.')
         }
-        async function applyLook(names, sc) {
-            if (!src || busy) return;
-            const T = {}; Object.keys(P).forEach(k => T[k] = KEYS.includes(k) ? auto[k] : 0); let W3 = null;
-            names.forEach(n => { const l = LK[n]; for (const k in l) { if (k === 'W') { W3 = W3 || l.W } else T[k] += l[k] * sc } });
-            KEYS.forEach(k => T[k] = clamp(T[k], -100, 100));['fade', 'grain', 'sharpen'].forEach(k => T[k] = clamp(T[k], 0, 100));
-            fitTo(T, names.includes('moody') ? .2 : names.includes('mono') ? .25 : .34, names.includes('airy') ? .75 : .6);
-            const cu = names.some(n => n === 'film' || n === 'airy') ? .02 : names.some(n => n === 'punch' || n === 'moody' || n === 'mono') ? .05 : .035;
-            await show(T, W3, cu, 'Applied ' + names.map(n => NAMES[n]).join(' + ') + '. I set the tonal sliders, shaped the curve' + (W3 ? ', tinted the shadows and highlights' : '') + (T.fade > 5 ? ', lifted the blacks' : '') + (T.grain > 5 ? ', added grain' : '') + (T.vignette > 5 ? ', added a vignette' : '') + ', and kept highlights from clipping. Want another tweak? Tell me.')
-        }
         autoBtn.onclick = autoShow;
-        $('reset').onclick = () => { KEYS.forEach(k => P[k] = auto[k]); sync(); render() };
+        $('reset').onclick = () => { KEYS.forEach(k => P[k] = graded ? auto[k] : 0); sync(); render() };
         /* ---------- tabs, compare, layout ---------- */
         function setTab(t) {
             tab = t; document.querySelectorAll('.tab').forEach(b => { const on = b.dataset.t === t; b.classList.toggle('on', on); b.setAttribute('aria-selected', on) });
-            ['g', 'l', 'c', 'v', 't'].forEach(x => $('p-' + x).classList.toggle('on', x === t));
-            if (!showing) { if (graded) { setPos(50); showCompare(true) } else setPos(100) }
+            ['g', 'c', 'v', 't'].forEach(x => $('p-' + x).classList.toggle('on', x === t));
+            if (!showing) { if (graded) { setPos(50); showCompare(true) } else setPos(0) }
             $('hint').textContent = HINT[t]
         }
         document.querySelectorAll('.tab').forEach(b => b.onclick = () => setTab(b.dataset.t));
@@ -274,7 +238,7 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
             auto = analyze(src.data); const z = {}; KEYS.forEach(k => z[k] = 0); const lim = Math.max(.02, measure(z).clip * 1.15 + .005);
             for (let i = 0; i < 18; i++) { const m = measure(auto); if (m.clip > lim) { auto.exposure -= 4; auto.highlights = Math.max(-60, auto.highlights - 4) } else if (m.mean < .3 && auto.exposure < 30) auto.exposure += 3; else break }
             readPhoto(); resetExtras(); Object.keys(P).forEach(k => P[k] = 0); sync(); render();
-            graded = false; busy = false; $('gwrap').classList.remove('open'); $('exp').classList.remove('open'); divEl.classList.remove('scan'); showCompare(false); setTab('g'); setPos(100); autoBtn.textContent = 'Auto color grade'; autoBtn.disabled = false
+            graded = false; busy = false; divEl.classList.remove('scan'); showCompare(false); setTab('g'); setPos(0); autoBtn.textContent = 'Auto color grade'; autoBtn.disabled = false
         }
         /* ---------- open photo: JPG/PNG/WebP natively, HEIC and RAW previews ---------- */
         const RAWX = 'dng cr2 cr3 crw nef nrw arw srf sr2 orf rw2 raf pef srw raw 3fr erf kdc mrw x3f rwl iiq'.split(' '), fext = n => (n.split('.').pop() || '').toLowerCase();
@@ -323,7 +287,7 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
             [['#9a9498', 300, 90], ['#74717b', 390, 70], ['#4d5154', 480, 50], ['#2f3b35', 570, 36]].forEach(([col, y, amp], i) => { x.fillStyle = col; x.beginPath(); x.moveTo(0, 800); for (let px = 0; px <= 1200; px += 20)x.lineTo(px, y + Math.sin(px / 130 + i * 1.7) * amp * .6 + Math.sin(px / 47 + i) * amp * .25); x.lineTo(1200, 800); x.fill() });
             g = x.createLinearGradient(0, 640, 0, 800); g.addColorStop(0, '#3d5560'); g.addColorStop(1, '#1f2d33'); x.fillStyle = g; x.fillRect(0, 650, 1200, 150); return c
         }
-        autoBtn.disabled = true; setTab('g'); $('tip').textContent = 'Drop a photo to see its histogram and a quick read of its light and color.';
+        autoBtn.disabled = true; setTab('g');
         const dz = $('drop'); dz.onclick = () => $('file').click(); dz.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); $('file').click() } });
         let dcn = 0; addEventListener('dragenter', e => { e.preventDefault(); dcn++; dz.classList.add('over') }); addEventListener('dragleave', () => { if (--dcn <= 0) { dcn = 0; dz.classList.remove('over') } }); addEventListener('drop', () => { dcn = 0; dz.classList.remove('over') });
 
@@ -401,7 +365,7 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
 
             function upd() {
                 const n = items.length, d = items.filter(x => x.status === 'done').length;
-                bar.hidden = n < 1; $('exp').classList.toggle('open', !running && (d > 0 || graded)); bc.textContent = d + ' of ' + n + ' graded';
+                bar.hidden = n < 1; $('exp').classList.toggle('open', !running && n > 0); bc.textContent = d + ' of ' + n + ' graded';
                 [nl, nr].forEach(b => b.classList.toggle('show', n > 1));
                 items.forEach((x, i) => x.el.classList.toggle('on', i === cur))
             }
@@ -524,8 +488,7 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
             /* ---------- remove photos ---------- */
             function prev(im) { const iw = im.naturalWidth || im.width, ih = im.naturalHeight || im.height, k = Math.min(1, PREV / Math.max(iw, ih)); const c = document.createElement('canvas'); c.width = Math.round(iw * k); c.height = Math.round(ih * k); const x = c.getContext('2d'); x.imageSmoothingQuality = 'high'; x.drawImage(im, 0, 0, c.width, c.height); return c }
             function clearMain() {
-                src = null; W = H = 0; graded = false; viewer.hidden = true; $('drop').hidden = false; showCompare(false); Object.keys(P).forEach(k => P[k] = 0); resetExtras(); sync(); $('gwrap').classList.remove('open'); $('met').innerHTML = '';
-                $('tip').textContent = 'Drop a photo to see its histogram and a quick read of its light and color.'; const h = $('hist'); h.getContext('2d').clearRect(0, 0, h.width, h.height); autoBtn.disabled = true; autoBtn.textContent = 'Auto color grade'
+                src = null; W = H = 0; graded = false; viewer.hidden = true; $('drop').hidden = false; showCompare(false); Object.keys(P).forEach(k => P[k] = 0); resetExtras(); sync(); autoBtn.disabled = true; autoBtn.textContent = 'Auto color grade'
             }
             async function remove(i) {
                 if (running || adding || loading || busy || !items[i]) return;
@@ -582,7 +545,6 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
                 dlSel = new Set(items); grid.innerHTML = '';
                 items.forEach(it => {
                     const t = document.createElement('button'), c = document.createElement('canvas'); t.className = 'dt'; t.setAttribute('aria-label', it.name); c.width = it.cv.width; c.height = it.cv.height; c.getContext('2d').drawImage(it.cv, 0, 0); t.appendChild(c);
-                    if (!(it.status === 'done' || (items[cur] === it && graded))) { const s = document.createElement('small'); s.textContent = 'Original'; t.appendChild(s) }
                     t.onclick = () => { dlSel.has(it) ? dlSel.delete(it) : dlSel.add(it); refresh() }; grid.appendChild(t)
                 });
                 dp.hidden = true; refresh(); modal.hidden = false
@@ -636,10 +598,9 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
             };
 
             /* ---------- Crop tab: rotate, flip, straighten, crop (aspect + zoom + position) ---------- */
-            const G0 = () => ({ rot: 0, fh: false, fv: false, ang: 0, asp: 0, zoom: 0, px: 0, py: 0 }), isG0 = g => !g.rot && !g.fh && !g.fv && !g.ang && !g.asp && !g.zoom;
+            const G0 = () => ({ rot: 0, fh: false, fv: false, ang: 0, asp: 0, cr: null }), isG0 = g => !g.rot && !g.fh && !g.fv && !g.ang && !g.cr;
             function geoBox(iw, ih, g) {
-                const sw = g.rot % 180 ? ih : iw, sh = g.rot % 180 ? iw : ih, fa = sw / sh, a = g.asp || fa, f = 1 - g.zoom * .008;
-                const cw = (a >= fa ? 1 : a / fa) * f, ch = (a >= fa ? fa / a : 1) * f; return { sw, sh, cw, ch, cx: (1 - cw) / 2 * (1 + g.px / 100), cy: (1 - ch) / 2 * (1 + g.py / 100) }
+                const sw = g.rot % 180 ? ih : iw, sh = g.rot % 180 ? iw : ih, c = g.cr || { x: 0, y: 0, w: 1, h: 1 }; return { sw, sh, cw: c.w, ch: c.h, cx: c.x, cy: c.y }
             }
             function geoDraw(img, iw, ih, g, k) {
                 const b = geoBox(iw, ih, g), c = document.createElement('canvas'); c.width = Math.max(1, Math.round(b.cw * b.sw * k)); c.height = Math.max(1, Math.round(b.ch * b.sh * k));
@@ -648,27 +609,134 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
             }
             function applyGeo() {
                 const it = items[cur]; if (!it || !it.base) return;
-                const c = geoDraw(it.base, it.base.width, it.base.height, it.geo, 1); W = c.width; H = c.height; cO.width = cG.width = dots.width = W; cO.height = cG.height = dots.height = H;
+                const c = geoDraw(it.base, it.base.width, it.base.height, it.geo.cropping ? { ...it.geo, cr: null } : it.geo, 1); W = c.width; H = c.height; cO.width = cG.width = dots.width = W; cO.height = cG.height = dots.height = H;
                 ctxO.drawImage(c, 0, 0); src = ctxO.getImageData(0, 0, W, H); noise = new Float32Array(W * H); for (let i = 0; i < noise.length; i++) noise[i] = Math.random() - .5; fit();
                 const k = Math.min(1, 200 / Math.max(W, H)), w = Math.max(1, Math.round(W * k)), h = Math.max(1, Math.round(H * k)), t = document.createElement('canvas'); t.width = w; t.height = h;
                 const x = t.getContext('2d', { willReadFrequently: true }); x.drawImage(c, 0, 0, w, h); it.sm = x.getImageData(0, 0, w, h); it.out = new ImageData(w, h); it.cv.width = w; it.cv.height = h; it.cx.putImageData(it.sm, 0, 0); render()
             }
             let gp = false; const schedGeo = () => { if (!gp) { gp = true; requestAnimationFrame(() => { gp = false; applyGeo() }) } };
+                        /* ================= shared helpers ================= */
+            const ok2 = () => { const it = items[cur]; return it && !busy && !running ? it : null };
+            const FULL = () => ({ x: 0, y: 0, w: 1, h: 1 }), itc = () => items[cur];
+            let down = false, restoring = false, seen = '';
+            addEventListener('pointerdown', () => { down = true }, true);
+            ['pointerup', 'pointercancel'].forEach(v => addEventListener(v, () => { down = false }, true));
+            const fdims = it => { const b = geoBox(it.sm.width, it.sm.height, it.geo); return { sw: b.sw, sh: b.sh } };
+            function modeFix() { if (tab === 'x' || tab === 'k') { showCompare(false); setPos(0) }  }
+            function setGradedUI(on) { if (on) gUI(); else { graded = false; showCompare(false); setPos(0); autoBtn.textContent = 'Auto color grade'; upd() } modeFix() }
+
+            /* ================= zoom ================= */
+            let Z = 1, TX = 0, TY = 0, pan = null; const stg = $('stage');
+            const zt = document.createElement('div'); zt.className = 'zt';
+            zt.innerHTML = '<button class="ib" id="zo" title="Zoom out" aria-label="Zoom out"><svg viewBox="0 0 24 24"><path d="M5 12h14"/></svg></button><button class="zl" id="zl" title="Fit to screen" aria-label="Fit to screen">100%</button><button class="ib" id="zi" title="Zoom in" aria-label="Zoom in"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>';
+            document.querySelector('.below').appendChild(zt);
+            function zapply() { viewer.style.setProperty('--z', Z); viewer.style.setProperty('--tx', TX + 'px'); viewer.style.setProperty('--ty', TY + 'px'); $('zl').textContent = Math.round(Z * 100) + '%'; viewer.classList.toggle('zm', Z > 1) }
+            function clampPan() { const sr = stg.getBoundingClientRect(), mx = Math.max(0, (viewer.offsetWidth * Z - sr.width) / 2 + 60), my = Math.max(0, (viewer.offsetHeight * Z - sr.height) / 2 + 60); TX = clamp(TX, -mx, mx); TY = clamp(TY, -my, my) }
+            function zoomTo(z, px, py) {
+                if (viewer.hidden) return; z = clamp(z, 1, 8); const r = viewer.getBoundingClientRect(), bx = r.left + r.width / 2 - TX, by = r.top + r.height / 2 - TY; if (px == null) { px = bx + TX; py = by + TY }
+                TX = (px - bx) - (px - bx - TX) * z / Z; TY = (py - by) - (py - by - TY) * z / Z; Z = z; if (Z === 1) TX = TY = 0; clampPan(); zapply()
+            }
+            $('zi').onclick = () => zoomTo(Z * 1.4); $('zo').onclick = () => zoomTo(Z / 1.4); $('zl').onclick = () => zoomTo(1);
+            stg.addEventListener('wheel', e => { if (viewer.hidden) return; e.preventDefault(); zoomTo(Z * Math.exp(-e.deltaY * (e.ctrlKey ? .01 : .0018)), e.clientX, e.clientY) }, { passive: false });
+            const _li2 = window.loadImage; window.loadImage = function (i) { _li2(i); Z = 1; TX = TY = 0; zapply() };
+
+            /* ================= crop + rotate (interactive) ================= */
+            const ASP = [['Free', 0], ['Original', -1], ['1:1', 1], ['4:5', .8], ['3:2', 1.5], ['2:3', 2 / 3], ['16:9', 16 / 9], ['9:16', 9 / 16]];
             const tb = document.createElement('button'); tb.className = 'tab'; tb.setAttribute('role', 'tab'); tb.setAttribute('aria-selected', 'false'); tb.dataset.t = 'x';
             tb.innerHTML = '<svg viewBox="0 0 24 24"><path d="M7 3v14h14M3 7h14v14"/></svg>Crop'; tb.onclick = () => setTab('x'); document.querySelector('.tabs').appendChild(tb);
             const pane = document.createElement('div'); pane.className = 'pane'; pane.id = 'p-x';
-            pane.innerHTML = '<div class="ct">Rotate and flip</div><div class="chips" id="xr"></div><div class="ct">Straighten</div><div class="col" id="xs"></div><div class="ct">Crop</div><div class="chips" id="xa"></div><div class="col" id="xz"></div><button class="btn ghost" id="xrst">Reset crop and rotation</button>';
-            document.querySelector('.panel').appendChild(pane); HINT.x = 'Rotate, flip, straighten and crop. Pick a shape, then use zoom and position to frame it.';
-            const _st = setTab; window.setTab = t => { pane.classList.toggle('on', t === 'x'); _st(t) };
-            const sl = {}, ASP = [['Original', 0], ['1:1', 1], ['4:5', .8], ['3:2', 1.5], ['2:3', 2 / 3], ['16:9', 16 / 9], ['9:16', 9 / 16]], ok2 = () => { const it = items[cur]; return it && !busy && !running ? it : null };
-            [['ang', 'Straighten', -45, 45, .5, 'xs'], ['zoom', 'Zoom', 0, 100, 1, 'xz'], ['px', 'Position X', -100, 100, 1, 'xz'], ['py', 'Position Y', -100, 100, 1, 'xz']].forEach(([k, l, mn, mx, stp, box]) => {
-                const r = document.createElement('div'); r.className = 'row'; r.innerHTML = '<span>' + l + '</span><input type="range" min="' + mn + '" max="' + mx + '" step="' + stp + '" value="0" aria-label="' + l + '"><output>0</output>';
-                const inp = r.querySelector('input'), o = r.querySelector('output'); fill(inp); inp.addEventListener('input', () => { const it = ok2(); if (!it) return; it.geo[k] = +inp.value; o.textContent = inp.value; fill(inp); schedGeo() }); $(box).appendChild(r); sl[k] = [inp, o]
+            pane.innerHTML = '<div class="ct">Rotate and flip</div><div class="icons" id="xr"></div><div class="ct">Straighten</div><div class="col" id="xs"></div><div class="ct">Crop shape</div><div class="chips" id="xa"></div><div class="two"><button class="btn" id="xok">Apply crop</button><button class="btn ghost" id="xrst">Reset</button></div>';
+            document.querySelector('.panel').appendChild(pane); HINT.x = 'Drag the corners or edges to crop, drag inside the box to move it. Pick a shape to lock the ratio.';
+            const ov = document.createElement('div'); ov.className = 'crop'; ov.hidden = true;
+            ov.innerHTML = '<i class="gl v1"></i><i class="gl v2"></i><i class="gl h1"></i><i class="gl h2"></i>' + ['nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w'].map(h => '<b class="hd ' + h + '" data-h="' + h + '"></b>').join(''); viewer.appendChild(ov);
+            function drawCrop() { const it = itc(); if (!it) return; const c = it.geo.cr || FULL(); ov.style.left = c.x * 100 + '%'; ov.style.top = c.y * 100 + '%'; ov.style.width = c.w * 100 + '%'; ov.style.height = c.h * 100 + '%' }
+            const lockK = it => { const g = it.geo; if (!g.asp) return 0; const d = fdims(it); return (g.asp < 0 ? d.sw / d.sh : g.asp) * d.sh / d.sw };
+            function resize(s, h, px, py, k, mn) {
+                let l = s.x, t = s.y, r = s.x + s.w, b = s.y + s.h;
+                if (!k) { if (h.includes('w')) l = clamp(px, 0, r - mn); if (h.includes('e')) r = clamp(px, l + mn, 1); if (h.includes('n')) t = clamp(py, 0, b - mn); if (h.includes('s')) b = clamp(py, t + mn, 1); return { x: l, y: t, w: r - l, h: b - t } }
+                const hx = h.includes('w') ? -1 : h.includes('e') ? 1 : 0, hy = h.includes('n') ? -1 : h.includes('s') ? 1 : 0, ax = hx < 0 ? r : l, ay = hy < 0 ? b : t;
+                let w = hx && hy ? Math.max(Math.abs(px - ax), Math.abs(py - ay) * k) : hx ? Math.abs(px - ax) : Math.abs(py - ay) * k;
+                const mw = hx < 0 ? ax : hx > 0 ? 1 - ax : 1, mh = hy < 0 ? ay : hy > 0 ? 1 - ay : 1; w = Math.max(mn, Math.min(w, mw, mh * k, k)); const hh = w / k;
+                return { x: hx < 0 ? ax - w : hx > 0 ? ax : clamp(s.x + s.w / 2 - w / 2, 0, 1 - w), y: hy < 0 ? ay - hh : hy > 0 ? ay : clamp(s.y + s.h / 2 - hh / 2, 0, 1 - hh), w, h: hh }
+            }
+            let ds = null;
+            ov.addEventListener('pointerdown', e => { e.stopPropagation(); const it = itc(); if (!it) return; const r = viewer.getBoundingClientRect(); ds = { h: e.target.dataset.h || 'm', c: { ...(it.geo.cr || FULL()) }, x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height }; ov.setPointerCapture(e.pointerId); e.preventDefault() });
+            ov.addEventListener('pointermove', e => {
+                if (!ds) return; const it = itc(), r = viewer.getBoundingClientRect(), px = clamp((e.clientX - r.left) / r.width, 0, 1), py = clamp((e.clientY - r.top) / r.height, 0, 1), s = ds.c;
+                it.geo.cr = ds.h === 'm' ? { x: clamp(s.x + px - ds.x, 0, 1 - s.w), y: clamp(s.y + py - ds.y, 0, 1 - s.h), w: s.w, h: s.h } : resize(s, ds.h, px, py, lockK(it), .05); drawCrop()
             });
-            function syncGeo() { const it = items[cur], g = it ? it.geo : G0(); Object.keys(sl).forEach(k => { sl[k][0].value = g[k]; sl[k][1].textContent = g[k]; fill(sl[k][0]) });[...$('xa').children].forEach((b, i) => b.classList.toggle('on', Math.abs(ASP[i][1] - g.asp) < 1e-6)) }
-            const act = (l, f) => { const b = document.createElement('button'); b.className = 'chip'; b.textContent = l; b.onclick = () => { const it = ok2(); if (!it) return; f(it.geo); syncGeo(); applyGeo() }; return b };
-            $('xr').append(act('Rotate left', g => { g.rot = (g.rot + 270) % 360; g.px = g.py = 0 }), act('Rotate right', g => { g.rot = (g.rot + 90) % 360; g.px = g.py = 0 }), act('Flip horizontal', g => { g.fh = !g.fh; g.rot = (360 - g.rot) % 360; g.ang = -g.ang; g.px = g.py = 0 }), act('Flip vertical', g => { g.fv = !g.fv; g.rot = (360 - g.rot) % 360; g.ang = -g.ang; g.px = g.py = 0 }));
-            ASP.forEach(([l, v]) => { $('xa').appendChild(act(l, g => { g.asp = v; g.px = g.py = 0 })) }); $('xrst').onclick = () => { const it = ok2(); if (!it) return; Object.assign(it.geo, G0()); syncGeo(); applyGeo() }; syncGeo();
+            ['pointerup', 'pointercancel'].forEach(v => ov.addEventListener(v, () => { ds = null }));
+            function enterCrop() { const it = itc(); if (!it || !it.base) return; zoomTo(1); it.geo.cropping = true; document.body.classList.add('cropping'); applyGeo(); ov.hidden = false; drawCrop() }
+            function exitCrop() { const it = itc(); ov.hidden = true; document.body.classList.remove('cropping'); zoomTo(1); if (it && it.geo.cropping) { it.geo.cropping = false; const c = it.geo.cr; if (c && c.w > .999 && c.h > .999) it.geo.cr = null; if (it.base) applyGeo() } }
+            const XF = { R: p => [1 - p[1], p[0]], L: p => [p[1], 1 - p[0]], H: p => [1 - p[0], p[1]], V: p => [p[0], 1 - p[1]] };
+            function remap(it, op, fac) {
+                const f = XF[op], q = op === 'R' || op === 'L', c = it.geo.cr;
+                if (c) { const a = f([c.x, c.y]), b = f([c.x + c.w, c.y + c.h]); it.geo.cr = { x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), w: Math.abs(a[0] - b[0]), h: Math.abs(a[1] - b[1]) } }
+                if (q && it.geo.asp > 0) it.geo.asp = 1 / it.geo.asp;
+            }
+            const IBS = [['Rotate left', 'M4 4v5h5M4.6 9A8 8 0 1 1 4 12', 'L', g => { g.rot = (g.rot + 270) % 360 }], ['Rotate right', 'M20 4v5h-5M19.4 9A8 8 0 1 0 20 12', 'R', g => { g.rot = (g.rot + 90) % 360 }],
+            ['Flip horizontal', 'M12 3v18M9 7L3 17h6zM15 7l6 10h-6z', 'H', g => { g.fh = !g.fh; g.rot = (360 - g.rot) % 360; g.ang = -g.ang }], ['Flip vertical', 'M3 12h18M7 9l5-6 5 6zM7 15l5 6 5-6z', 'V', g => { g.fv = !g.fv; g.rot = (360 - g.rot) % 360; g.ang = -g.ang }]];
+            IBS.forEach(([l, d, op, fn]) => {
+                const b = document.createElement('button'); b.className = 'ib big'; b.title = l; b.setAttribute('aria-label', l); b.innerHTML = '<svg viewBox="0 0 24 24"><path d="' + d + '"/></svg>';
+                b.onclick = () => { const it = ok2(); if (!it) return; const d0 = fdims(it); fn(it.geo); remap(it, op, d0.sw / d0.sh); syncGeo(); applyGeo(); drawCrop() }; $('xr').appendChild(b)
+            });
+            const ang = (() => {
+                const r = document.createElement('div'); r.className = 'row'; r.innerHTML = '<span>Angle</span><input type="range" min="-45" max="45" step=".5" value="0" aria-label="Straighten"><output>0</output>';
+                const i = r.querySelector('input'), o = r.querySelector('output'); fill(i); i.addEventListener('input', () => { const it = ok2(); if (!it) return; it.geo.ang = +i.value; o.textContent = i.value; fill(i); schedGeo() }); $('xs').appendChild(r); return [i, o]
+            })();
+            function syncGeo() { const it = items[cur], g = it ? it.geo : G0(); ang[0].value = g.ang; ang[1].textContent = g.ang; fill(ang[0]); [...$('xa').children].forEach((b, i) => b.classList.toggle('on', ASP[i][1] === g.asp)) }
+            ASP.forEach(([l, v]) => {
+                const b = document.createElement('button'); b.className = 'chip'; b.textContent = l;
+                b.onclick = () => { const it = ok2(); if (!it) return; it.geo.asp = v; const k = lockK(it); if (k) { const c = it.geo.cr || FULL(), w = k >= 1 ? 1 : k, h = k >= 1 ? 1 / k : 1; it.geo.cr = { x: clamp(c.x + c.w / 2 - w / 2, 0, 1 - w), y: clamp(c.y + c.h / 2 - h / 2, 0, 1 - h), w, h } } syncGeo(); drawCrop() }; $('xa').appendChild(b)
+            });
+            $('xok').onclick = () => setTab('g');
+            $('xrst').onclick = () => { const it = ok2(); if (!it) return; const c = it.geo.cropping; Object.assign(it.geo, G0()); it.geo.cropping = c; syncGeo(); applyGeo(); drawCrop() };
+
+            /* ================= history: undo / redo ================= */
+            const HMAX = 60, cl = o => JSON.parse(JSON.stringify(o, (k, v) => k === 'mc' || k === 'mk' || k === 'cropping' ? undefined : v));
+            const full = it => ({ s: snap(), g: cl(it.geo) });
+            function labelOf(a, b) {
+                const j = (x, y) => JSON.stringify(x) !== JSON.stringify(y), ch = Object.keys(b.s.P).filter(k => a.s.P[k] !== b.s.P[k]);
+                if (j(a.g, b.g)) return 'Crop / rotate'; if (ch.length > 3) return 'Look / auto grade';
+                if (ch.length) return ch.slice(0, 2).map(k => k[0].toUpperCase() + k.slice(1)).join(' + '); if (j(a.s.WH, b.s.WH)) return 'Color wheels'; if (j(a.s.H8, b.s.H8)) return 'Single colors'; if (j(a.s.C, b.s.C)) return 'Curves'; return 'Edit'
+            }
+            function bu() { const it = items[cur], h = it && it.hist; $('undo').disabled = !h || h.i <= 0; $('redo').disabled = !h || h.i >= h.a.length - 1 }
+            function hl() { bu() }
+            setInterval(() => {
+                const it = items[cur]; if (!it || !src || busy || running || loading || adding || exporting || showing || down || restoring) { bu(); return }
+                const f = full(it), sg = JSON.stringify(f), h = it.hist || (it.hist = { a: [], i: -1 });
+                if (h.i < 0) { h.a = [{ f, sg, t: graded ? 'Graded' : 'Original' }]; h.i = 0; seen = sg; hl(); return }
+                if (sg === h.a[h.i].sg) { seen = sg; return } if (sg !== seen) { seen = sg; return }
+                h.a.length = h.i + 1; h.a.push({ f, sg, t: labelOf(h.a[h.i].f, f) }); if (h.a.length > HMAX) h.a.shift(); h.i = h.a.length - 1; hl()
+            }, 250);
+            function jump(n) {
+                const it = items[cur], h = it && it.hist; if (!h || n < 0 || n >= h.a.length || n === h.i || busy || running || loading || adding || exporting) return;
+                restoring = true; h.i = n; const e = h.a[n].f, gd = JSON.stringify(e.g) !== JSON.stringify(cl(it.geo)), c = it.geo.cropping;
+                Object.assign(it.geo, G0(), e.g); it.geo.cropping = c; apply(e.s); sync(); if (e.s.gr !== graded) setGradedUI(e.s.gr);
+                if (gd) applyGeo(); else render(); syncGeo(); drawCrop(); seen = JSON.stringify(full(it)); restoring = false; hl()
+            }
+            const undo = () => { const h = items[cur] && items[cur].hist; if (h) jump(h.i - 1) }, redo = () => { const h = items[cur] && items[cur].hist; if (h) jump(h.i + 1) };
+            $('undo').onclick = undo; $('redo').onclick = redo;
+            addEventListener('keydown', e => {
+                const t = e.target; if (t && (t.tagName === 'TEXTAREA' || (t.tagName === 'INPUT' && t.type !== 'range'))) return; const m = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+                if (m && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo() } else if (m && k === 'y') { e.preventDefault(); redo() }
+                else if (!m) { if (e.key === '+' || e.key === '=') zoomTo(Z * 1.25); else if (e.key === '-') zoomTo(Z / 1.25); else if (e.key === '0') zoomTo(1) }
+            });
+            
+            /* ================= pan when zoomed ================= */
+            viewer.addEventListener('pointerdown', e => {
+                if (e.target.closest('.crop') || viewer.hidden) return;
+                if (Z > 1 && !e.target.closest('#div')) { pan = { x: e.clientX, y: e.clientY, tx: TX, ty: TY }; viewer.setPointerCapture(e.pointerId); e.stopImmediatePropagation(); e.preventDefault(); return }
+                if (tab === 'x') e.stopImmediatePropagation()
+            }, true);
+            viewer.addEventListener('pointermove', e => { if (pan) { TX = pan.tx + e.clientX - pan.x; TY = pan.ty + e.clientY - pan.y; clampPan(); zapply() } }, true);
+            ['pointerup', 'pointercancel'].forEach(v => viewer.addEventListener(v, () => { pan = null }, true));
+            const _sel = select; select = async function (i) { const o = items[cur]; if (o) o.geo.cropping = false; await _sel(i); if (tab === 'x') enterCrop(); hl() };
+
+/* ================= tabs ================= */
+            const _st = setTab; window.setTab = t => { const was = tab; pane.classList.toggle('on', t === 'x'); _st(t); if (was === 'x' && t !== 'x') exitCrop(); if (t === 'x' && was !== 'x') enterCrop(); modeFix() };
+            syncGeo();
+
 
             /* ---------- wiring: multi-select input, multi-drop, new Auto button ---------- */
             window.openFile = () => { };
