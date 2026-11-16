@@ -1,0 +1,8 @@
+{
+  "name": "asha-photo-editor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Asha photo editor with AI-assisted colour grading (Groq vision) and an on-device fallback",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}

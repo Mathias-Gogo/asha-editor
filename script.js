@@ -191,6 +191,10 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
             Object.keys(P).forEach(k => P[k] = 0); resetExtras(); sync(); render(); $('gwrap').classList.add('open'); setTab('g'); setPos(100); window.scrollTo({ top: 0 });
             place(innerWidth - 80, innerHeight - 90); ash.classList.add('on'); cap('Reading the photo...');
             const hr = await seeEl($('viewer')); await Promise.all([moveTo(hr.left + hr.width * .7, hr.top + hr.height * .5, 1100), tween(1300, t => drawDots(t))]);
+            if (window.__plan) {
+                let dn = false; window.__plan.then(() => { dn = true }, () => { dn = true }); const M = ['Studying the skin tones...', 'Reading the light...', 'Checking the colors...', 'Balancing the shadows...', 'Almost there...']; let mi = 0;
+                while (!dn) { cap(M[mi++ % M.length]); await tween(1500, t => drawDots(t)) } window.__plan = null
+            }
             dots.style.opacity = 0; setPos(0); cap('Adjusting the light...'); await tapTab('g');
             const keys = ['exposure', 'highlights', 'shadows', 'contrast', 'vibrance', 'saturation', 'warmth'].filter(k => Math.abs(T[k]) >= 2).slice(0, 5), done = new Set(keys);
             for (const k of keys) await dragSlider(k, T[k], 520);
@@ -359,7 +363,7 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
             const stFrom = g => {
                 const p = {}; Object.keys(P).forEach(k => p[k] = KEYS.includes(k) ? g.T[k] : 0);
                 const C = [0, 1, 2, 3].map(() => ID()); C[0][1][1] -= g.cu; C[0][3][1] += g.cu;
-                return { gr: true, P: p, WH: g.wv.map(a => ({ h: a[0], s: a[1], l: a[2] })), H8: Array.from({ length: 8 }, () => [0, 0, 0]), C }
+                return { gr: true, P: p, WH: g.wv.map(a => ({ h: a[0], s: a[1], l: a[2] })), H8: g.h8 || Array.from({ length: 8 }, () => [0, 0, 0]), C }
             };
             const gUI = () => { graded = true; $('gwrap').classList.add('open'); $('exp').classList.add('open'); showCompare(true); setPos(50); autoBtn.textContent = 'Run auto again' };
 
@@ -442,7 +446,7 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
                 let ex = Math.min(tr[0] - 1, q.length); if (innerWidth < 700) ex = Math.min(ex, 4); const D = reduce ? 500 : tr[1];
                 running = true; document.body.classList.add('bl'); queue = q; ags = [];
                 lead.status = 'work'; lead.el.classList.remove('done'); lead.el.classList.add('work'); q.forEach(x => x.el.classList.remove('done')); upd();
-                const lp = autoShow().then(() => { lead.status = 'done'; lead.el.classList.remove('work'); lead.el.classList.add('done'); upd() });
+                const lp = autoShow().then(() => { lead.status = 'done'; lead.el.classList.remove('work'); lead.el.classList.add('done'); upd(); const w = window.__want; window.__want = null; if (w && w !== lead && items.includes(w)) { if (w.status === 'done') select(items.indexOf(w)); else cap('Tap that one again once it is graded.', 2400) } });
                 const sx = innerWidth - 80, sy = innerHeight - 90, now = performance.now();
                 for (let i = 0; i < ex; i++) {
                     const el = document.createElement('div'); el.className = 'ag'; el.style.setProperty('--c', COL[i % COL.length]); el.innerHTML = PICK; el.style.transform = 'translate(' + sx + 'px,' + sy + 'px)'; document.body.appendChild(el);
@@ -473,7 +477,9 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
                 adding = false; autoBtn.disabled = !items.length; upd(); if (ok) cap(ok + (ok > 1 ? ' photos' : ' photo') + ' ready.', 1800); if (bad.length) asha('I could not open ' + bad.length + (bad.length > 1 ? ' files: ' : ' file: ') + bad.slice(0, 5).join(', ') + (bad.length > 5 ? '...' : '') + '. For RAW files this means no usable built-in preview was found.', 300)
             }
             async function select(i) {
-                if (running || busy || adding || loading || i < 0 || i === cur || !items[i]) return;
+                if (adding || loading || i < 0 || i === cur || !items[i]) return;
+                if (busy || window.__pre) { window.__want = items[i]; cap('Asha is finishing the main photo. I will open that one next.', 2400); return }
+                if (running && items[i].status !== 'done') { cap(items[i].status === 'work' ? 'Asha is still grading that one. Open it once it finishes.' : 'That one is waiting in line. Open it once it is graded.', 2200); return }
                 const old = items[cur], it = items[i]; if (old && src) { old.st = snap(); old.base = null }
                 loading = true; cur = i; upd(); cap('Opening ' + it.name + '...');
                 try {
@@ -737,6 +743,83 @@ const $ = id => document.getElementById(id), clamp = (v, a, b) => v < a ? a : v 
             const _st = setTab; window.setTab = t => { const was = tab; pane.classList.toggle('on', t === 'x'); _st(t); if (was === 'x' && t !== 'x') exitCrop(); if (t === 'x' && was !== 'x') enterCrop(); modeFix() };
             syncGeo();
 
+
+                        /* ================= AI colour plan: vision model first, on-device fallback ================= */
+            const AI_URL = '/api/analyze', WK = { exposure: .3, contrast: .6, highlights: .6, shadows: .6, vibrance: .6, saturation: .6, warmth: .6, tint: .6 };
+            const inum = (v, lim) => clamp(Math.round(+v || 0), -lim, lim), LIGHT = ['very_light', 'light', 'medium'];
+            async function thumbOf(it) {
+                let s0 = it.base, tmp = null; if (!s0) { const r = await decodeFile(it.file); s0 = tmp = r.img }
+                const w0 = s0.naturalWidth || s0.width, h0 = s0.naturalHeight || s0.height, k = Math.min(1, 512 / Math.max(w0, h0)), c = document.createElement('canvas');
+                c.width = Math.round(w0 * k); c.height = Math.round(h0 * k); c.getContext('2d').drawImage(s0, 0, 0, c.width, c.height); if (tmp && tmp.close) tmp.close(); return c.toDataURL('image/jpeg', .8)
+            }
+            /* skin pixels by colour (YCbCr range); boxes (optional) limits the search to detected faces */
+            function skinStats(d, w, h, boxes) {
+                let n = 0, sr = 0, sg = 0, sy = 0;
+                for (let y = 0; y < h; y++)for (let x = 0; x < w; x++) {
+                    if (boxes && !boxes.some(b => x >= b.x && x <= b.x + b.width && y >= b.y && y <= b.y + b.height)) continue;
+                    const i = (y * w + x) * 4, r = d[i], g = d[i + 1], b = d[i + 2], Y = .299 * r + .587 * g + .114 * b, cb = 128 - .168736 * r - .331264 * g + .5 * b, cr = 128 + .5 * r - .418688 * g - .081312 * b;
+                    if (Y > 45 && Y < 240 && cb > 77 && cb < 127 && cr > 133 && cr < 173 && r > g && r > b) { n++; sr += r; sg += g; sy += Y }
+                }
+                return { n, share: n / Math.max(1, w * h), rg: n ? sr / Math.max(1, sg) : 1, lum: n ? sy / n : 0 }
+            }
+            /* on-device plan: face detector when the browser has one, otherwise skin colour alone. Needs no network. */
+            async function localPlan(it) {
+                const sm = it.sm; let boxes = null;
+                try { if ('FaceDetector' in window) { const c = document.createElement('canvas'); c.width = sm.width; c.height = sm.height; c.getContext('2d').putImageData(sm, 0, 0); const f = await new FaceDetector({ fastMode: true }).detect(c); if (f.length) boxes = f.map(q => q.boundingBox) } } catch (e) { }
+                const s = skinStats(sm.data, sm.width, sm.height, boxes), people = !!boxes || s.share > .012, k = people && s.lum > 110 ? clamp((s.rg - 1.42) / .25, 0, 1) : 0, cov = clamp(s.share * 6, 0, 1);
+                return { src: 'device', people, share: s.share, tone: null, cast: k > .3 ? 'too_red' : 'ok', adj: { exposure: 0, contrast: -Math.round(10 * cov), highlights: 0, shadows: 0, vibrance: 0, saturation: -Math.round(6 * k), warmth: 0, tint: 0 }, red: [Math.round(18 * k), -Math.round(28 * k), 0], orange: [Math.round(12 * k), -Math.round(16 * k), 0], note: '' }
+            }
+            function fromAI(a) {
+                const A = a.adjust || {}, adj = {}; Object.keys(WK).forEach(k => adj[k] = inum(A[k], 40)); const b = o => o ? [inum(o.hue, 40), inum(o.sat, 40), inum(o.lum, 40)] : [0, 0, 0];
+                return { src: 'ai', people: !!a.people, share: clamp(+a.skin_share || 0, 0, 1), tone: String(a.skin || ''), cast: String(a.skin_cast || 'ok'), adj, red: b(a.red_band), orange: b(a.orange_band), note: String(a.note || '').slice(0, 140) }
+            }
+            async function aiPlan(it) {
+                const image = await thumbOf(it), ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 16000);
+                try {
+                    const r = await fetch(AI_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ image }), signal: ctl.signal });
+                    if (!r.ok) throw new Error('ai ' + r.status); const j = await r.json(); if (!j || !j.analysis) throw new Error('ai empty'); return fromAI(j.analysis)
+                } finally { clearTimeout(to) }
+            }
+            const mb = (a, b) => [Math.max(a[0], b[0]), Math.min(a[1], b[1]), a[2] || b[2]];
+            function planFor(it) {
+                if (it.planP) return it.planP;
+                return it.planP = (async () => {
+                    let pl = null; try { pl = await aiPlan(it) } catch (e) { pl = null }
+                    const loc = await localPlan(it).catch(() => null);
+                    if (!pl) pl = loc; else if (loc && loc.people && pl.people && LIGHT.includes(pl.tone)) { pl.red = mb(pl.red, loc.red); pl.orange = mb(pl.orange, loc.orange); pl.adj.contrast = Math.min(pl.adj.contrast, loc.adj.contrast) } // the on-device check can only add skin protection
+                    it.plan = pl; return pl
+                })()
+            }
+            function fillT(T, pl) {
+                Object.keys(WK).forEach(k => { if (k in T) T[k] = clamp(T[k] + (pl.adj[k] || 0) * WK[k], -100, 100) });
+                if (pl.people) T.contrast = clamp(T.contrast - 6 * clamp(pl.share * 6, 0, 1), -100, 100)
+            }
+            const bandsOf = pl => { const H = Array.from({ length: 8 }, () => [0, 0, 0]); if (pl.people) { H[0] = pl.red.slice(); H[1] = pl.orange.slice() } return H };
+            function measureOut() {
+                const k = Math.min(1, 200 / Math.max(W, H)), c = document.createElement('canvas'); c.width = Math.max(1, Math.round(W * k)); c.height = Math.max(1, Math.round(H * k));
+                const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(cG, 0, 0, c.width, c.height); return skinStats(x.getImageData(0, 0, c.width, c.height).data, c.width, c.height, null)
+            }
+            async function finishSkin(it) {
+                const pl = it.plan; if (!pl) return; const lightSkin = !pl.tone || LIGHT.includes(pl.tone);
+                if (pl.people && (pl.red.some(Boolean) || pl.orange.some(Boolean) || lightSkin)) {
+                    const H = bandsOf(pl), from = H8.map(q => [...q]); cap('Softening the skin tones...');
+                    await tween(700, t => { for (let j = 0; j < 2; j++)for (let q = 0; q < 3; q++)H8[j][q] = from[j][q] + (H[j][q] - from[j][q]) * t; syncHS(); render() });
+                    for (let i = 0; i < 2 && lightSkin; i++) { const s = measureOut(); if (s.n < 30 || s.rg <= 1.5) break; for (const j of [0, 1]) { H8[j][1] = clamp(H8[j][1] - 8, -60, 60); H8[j][0] = clamp(H8[j][0] + 5, -60, 60) } syncHS(); render() } // check the result, and nudge if skin is still too red
+                }
+                cap(pl.src === 'ai' ? 'Done. Drag the line to compare.' : 'Done (quick mode). Drag the line to compare.', 2600)
+            }
+            window.autoShow = async function () {
+                if (!src || busy) return; const it = items[cur], T = {}; Object.keys(P).forEach(k => T[k] = KEYS.includes(k) ? auto[k] : 0);
+                window.__plan = it ? planFor(it).then(pl => { fillT(T, pl); return pl }) : null;
+                await show(T, wheelsFor(TEMP), .035, ''); if (it) await finishSkin(it)
+            };
+            const _go = gradeOf; gradeOf = function (it) { const g = _go(it); if (it.plan) { fillT(g.T, it.plan); g.h8 = bandsOf(it.plan) } return g };
+            const _sb = startBatch; startBatch = async function () {
+                if (running || busy || loading || adding || !src) return;
+                const rest = items.filter(x => x !== items[cur] && x.status !== 'done');
+                if (rest.length) { autoBtn.disabled = true; window.__pre = true; cap('Asha is studying your photos...'); try { await Promise.race([Promise.all(rest.map(planFor)), sleep(9000)]) } finally { autoBtn.disabled = false; window.__pre = false } }
+                return _sb()
+            };
 
             /* ---------- wiring: multi-select input, multi-drop, new Auto button ---------- */
             window.openFile = () => { };
